@@ -59,11 +59,20 @@ local FishingSpots = {
   [5] = { x = 1233, y = 729, z = 7 },
 }
 
+local RefilSpots = {
+  [1] = { x = 1196, y = 679, z = 7}, -- Escada pra vender peixe
+  [2] = { x = 1203, y = 670, z = 8}, -- Vender peixe
+  [3] = { x = 1196, y = 679, z = 8}, -- Escada pro andar de cima
+  [4] = { x = 1174, y = 683, z = 7}, -- Comprar minhoca
+  [5] = { x = 1176, y = 676, z = 7}, -- Andar de cima
+  [6] = { x = 1173, y = 676, z = 6}, -- Comprar minhoca
+  [7] = { x = 1176, y = 676, z = 6}, -- Comprar minhoca
+}
+
 -- Runtime variables
 local totalFishValue = 0
 local startTime = nil
 local waterPositions = {}
-local lowCap = false
 local currentSpot = 0
 local currentWaterTile = 1
 
@@ -106,6 +115,14 @@ local function updateHUD()
   meanFishValueHUD:setText("Profit/H: $" .. math.floor((totalFishValue / elapsed) * 3600))
 end
 
+local function GetPlayerCurrentCap()
+  return math.floor(Player.getCapacity() / 100)
+end
+
+local function PlayerHasCap()
+  return GetPlayerCurrentCap() > 1850
+end
+
 local function caughtAFish()
   for id, info in pairs(ItemsThatCanBeCaught) do
     local newQty = Game.getItemCount(id)
@@ -114,9 +131,8 @@ local function caughtAFish()
       totalFishValue = totalFishValue + info.price
       info.quantity = newQty
       updateHUD()
-      if Player.getCapacity() <= 5000 then
+      if PlayerHasCap() == false then
         Sound.play(Engine.getScriptsDirectory() .. "/sounds/AlarmLowCap.wav")
-        lowCap = true
       end
       return true
     end
@@ -179,13 +195,13 @@ local function sellItems()
   end
 end
 
-local function sellFishes()
+local function SellFishes()
   if Player.getState(PZ_STATE) and findNearbyNpc("fisherman") then
     Client.showMessage("Vendendo todo o loot...")
     gameTalk("hi", 1)
     wait(500)
     gameTalk("trade", 12)
-    wait(500)
+    wait(1000)
     sellItems()
     Client.showMessage("\n\n\n\n\n\nItems vendidos com sucesso :)")
   end
@@ -197,7 +213,7 @@ local function depositAllGold()
     gameTalk("hi", 1)
     wait(500)
     gameTalk("deposit all", 12)
-    wait(500)
+    wait(1000)
     gameTalk("yes", 12)
     Client.showMessage("\n\n\n\n\n\nGold depositado com sucesso :)")
   end
@@ -217,31 +233,70 @@ local function buyWorms()
     gameTalk("hi", 1)
     wait(500)
     gameTalk("trade", 12)
-    wait(500)
+    wait(1000)
     buyItems(WORM_ID, 1000)
     Client.showMessage("\n\n\n\n\n\nMinhoca comprada com sucesso :)")
   end
 end
 
-local function IsPlayerInFishingSpot()
+local function IsPlayerInSpot(x, y, z)
   local playerPos = Creature(Player.getId()):getPosition()
-  local fishingSpot = currentSpot + 1
-  return playerPos.x == FishingSpots[fishingSpot].x and playerPos.y == FishingSpots[fishingSpot].y and playerPos.z == FishingSpots[fishingSpot].z
+  return (playerPos.x == x and playerPos.y == y) or playerPos.z ~= z
 end
 
-local function startFishing()
-  lowCap = false
+local function PlayerGoTo(x, y, z)
+  Map.goTo(x, y, z)
+  while IsPlayerInSpot(x, y, z) == false do
+    wait(1500)
+  end
+end
+
+local function Refil()
+  local currentRefilStep = 1
+  -- Move to stair
+  PlayerGoTo(RefilSpots[currentRefilStep].x, RefilSpots[currentRefilStep].y, RefilSpots[currentRefilStep].z)
+  currentRefilStep = currentRefilStep + 1
+
+  -- Move close to NPC
+  PlayerGoTo(RefilSpots[currentRefilStep].x, RefilSpots[currentRefilStep].y, RefilSpots[currentRefilStep].z)
+  SellFishes()
+  currentRefilStep = currentRefilStep + 1
+  
+  -- Move to stair
+  PlayerGoTo(RefilSpots[currentRefilStep].x, RefilSpots[currentRefilStep].y, RefilSpots[currentRefilStep].z)
+  currentRefilStep = currentRefilStep + 1
+
+  -- Move to bank NPC
+  PlayerGoTo(RefilSpots[currentRefilStep].x, RefilSpots[currentRefilStep].y, RefilSpots[currentRefilStep].z)
+  currentRefilStep = currentRefilStep + 1
+  depositAllGold()
+
+  -- Move to stair
+  PlayerGoTo(RefilSpots[currentRefilStep].x, RefilSpots[currentRefilStep].y, RefilSpots[currentRefilStep].z)
+  currentRefilStep = currentRefilStep + 1
+
+  -- Move to tools NPC
+  PlayerGoTo(RefilSpots[currentRefilStep].x, RefilSpots[currentRefilStep].y, RefilSpots[currentRefilStep].z)
+  currentRefilStep = currentRefilStep + 1
+  buyWorms()
+
+  -- Move to stair
+  PlayerGoTo(RefilSpots[currentRefilStep].x, RefilSpots[currentRefilStep].y, RefilSpots[currentRefilStep].z)
+end
+
+local function StartFishing()
   while true do
-    local fishingSpot = currentSpot + 1
-    Map.goTo(FishingSpots[fishingSpot].x, FishingSpots[fishingSpot].y, FishingSpots[fishingSpot].z)
-    while IsPlayerInFishingSpot() == false do
-      wait(2000)
+    if PlayerHasCap() == false then
+      Refil()
     end
+
+    local fishingSpot = currentSpot + 1
+    PlayerGoTo(FishingSpots[fishingSpot].x, FishingSpots[fishingSpot].y, FishingSpots[fishingSpot].z)
     startTime = startTime or os.time()
     setupInitialStock()
     buildWaterPositions()
     local tries = 0
-    while currentWaterTile <= #waterPositions and lowCap == false do
+    while currentWaterTile <= #waterPositions and PlayerHasCap() do
       fishAt(currentWaterTile)
       tries = tries + 1
       if caughtAFish() or tries >= 15 then
@@ -255,10 +310,12 @@ local function startFishing()
     end
     Client.showMessage("\n\n\n\n\n\nTodos os spots foram pescados :)")
     Sound.play(Engine.getScriptsDirectory() .. "/sounds/Alarm Clock.wav")
-    if lowCap == true then
-      break
-    end
   end
+end
+
+local function ShowPosition()
+  local playerPosition = Creature(Player.getId()):getPosition()
+  Client.showMessage("x = " .. tostring(playerPosition.x) .. " y = " .. tostring(playerPosition.y) .. " z = " .. tostring(playerPosition.z))
 end
 
 -- Register hotkeys
@@ -273,10 +330,9 @@ local function bindHotkey(combo, name, callback)
   end 
 end
 
-bindHotkey("ctrl+shift+K", "StartFishing", startFishing)
-bindHotkey("ctrl+shift+V", "SellFishes", sellFishes)
-bindHotkey("ctrl+shift+G", "DepositAllGold", depositAllGold)
-bindHotkey("ctrl+shift+W", "BuyWorms", buyWorms)
+bindHotkey("ctrl+shift+K", "StartFishing", StartFishing)
+bindHotkey("ctrl+shift+V", "SellFishes", SellFishes)
+bindHotkey("ctrl+shift+B", "ShowPosition", ShowPosition)
 
 -- Debug print message hook
 -- Game.registerEvent(Game.Events.TEXT_MESSAGE, function(data)
