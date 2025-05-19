@@ -150,13 +150,29 @@ local function setupInitialStock()
   end
 end
 
-local function sellItems()
+local function hasAnyFishToSell()
   for id, info in pairs(ItemsThatCanBeCaught) do
+    if info.name == "winterberry liquor" then
+      goto next
+    end
     local count = Game.getItemCount(id)
     if count > 0 then
-      for i = 1, math.ceil(count / MAX_SELL_COUNT) do
-        Npc.sell(id, MAX_SELL_COUNT, true)
-        wait(650)
+      return true
+    end
+    ::next::
+  end
+  return false
+end
+
+local function sellItems()
+  while hasAnyFishToSell() do
+    for id, info in pairs(ItemsThatCanBeCaught) do
+      local count = Game.getItemCount(id)
+      if count > 0 then
+        for i = 1, math.ceil(count / MAX_SELL_COUNT) do
+          Npc.sell(id, MAX_SELL_COUNT, true)
+          wait(650)
+        end
       end
     end
   end
