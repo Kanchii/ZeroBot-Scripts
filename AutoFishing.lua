@@ -132,9 +132,9 @@ local function caughtAFish()
       totalFishValue = totalFishValue + info.price
       info.quantity = newQty
       updateHUD()
-      if PlayerHasCap() == false then
-        Sound.play(Engine.getScriptsDirectory() .. "/sounds/AlarmLowCap.wav")
-      end
+      -- if PlayerHasCap() == false then
+      --   Sound.play(Engine.getScriptsDirectory() .. "/sounds/AlarmLowCap.wav")
+      -- end
       return true
     end
   end
@@ -310,7 +310,7 @@ local function StartFishing()
       currentWaterTile = 1
     end
     Client.showMessage("\n\n\n\n\n\nTodos os spots foram pescados :)")
-    Sound.play(Engine.getScriptsDirectory() .. "/sounds/Alarm Clock.wav")
+    -- Sound.play(Engine.getScriptsDirectory() .. "/sounds/Alarm Clock.wav")
   end
 end
 
