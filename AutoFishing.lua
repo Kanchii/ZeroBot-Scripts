@@ -7,6 +7,7 @@ local PZ_STATE = 14
 local HUD_COLOR = {200, 200, 200}
 local HOTKEY_INTERVAL = 50
 local DELAY_BETWEEN_FISHING = 1100 -- 1.1s
+local WORM_ID = 3492
 
 -- Water tile IDs
 local WaterIds = {
@@ -190,6 +191,38 @@ local function sellFishes()
   end
 end
 
+local function depositAllGold()
+  if Player.getState(PZ_STATE) and findNearbyNpc("muzir") then
+    Client.showMessage("Depositando todo o gold...")
+    gameTalk("hi", 1)
+    wait(500)
+    gameTalk("deposit all", 12)
+    wait(500)
+    gameTalk("yes", 12)
+    Client.showMessage("\n\n\n\n\n\nGold depositado com sucesso :)")
+  end
+end
+
+local function buyItems(itemId, itemQuantity)
+  local totalItemCount = Game.getItemCount(itemId)
+  local totalToBuy = math.max(0, itemQuantity - totalItemCount)
+  if totalToBuy > 0 then
+    Npc.buy(itemId, totalToBuy, false, false)
+  end
+end
+
+local function buyWorms()
+  if Player.getState(PZ_STATE) and findNearbyNpc("lubo") then
+    Client.showMessage("Comprando minhoca...")
+    gameTalk("hi", 1)
+    wait(500)
+    gameTalk("trade", 12)
+    wait(500)
+    buyItems(WORM_ID, 1000)
+    Client.showMessage("\n\n\n\n\n\nMinhoca comprada com sucesso :)")
+  end
+end
+
 local function IsPlayerInFishingSpot()
   local playerPos = Creature(Player.getId()):getPosition()
   local fishingSpot = currentSpot + 1
@@ -237,11 +270,13 @@ local function bindHotkey(combo, name, callback)
     end, HOTKEY_INTERVAL)
   else
     print("Combinação de teclas inválida para " .. name)
-  end
+  end 
 end
 
 bindHotkey("ctrl+shift+K", "StartFishing", startFishing)
 bindHotkey("ctrl+shift+V", "SellFishes", sellFishes)
+bindHotkey("ctrl+shift+G", "DepositAllGold", depositAllGold)
+bindHotkey("ctrl+shift+W", "BuyWorms", buyWorms)
 
 -- Debug print message hook
 -- Game.registerEvent(Game.Events.TEXT_MESSAGE, function(data)
