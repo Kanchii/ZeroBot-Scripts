@@ -6,6 +6,7 @@ local CHECK_RANGE = 4
 local PZ_STATE = 14
 local HUD_COLOR = {200, 200, 200}
 local HOTKEY_INTERVAL = 50
+local DELAY_BETWEEN_FISHING = 1100 -- 1.1s
 
 -- Water tile IDs
 local WaterIds = {
@@ -139,7 +140,7 @@ local function fishAt(idx)
   local pos = waterPositions[idx]
   if pos then
     Game.useItemOnGround(3483, pos.x, pos.y, pos.z)
-    wait(1000)
+    wait(DELAY_BETWEEN_FISHING)
   end
 end
 
