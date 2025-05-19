@@ -8,6 +8,7 @@ local HUD_COLOR = {200, 200, 200}
 local HOTKEY_INTERVAL = 50
 local DELAY_BETWEEN_FISHING = 1100 -- 1.1s
 local WORM_ID = 3492
+local PLAYER_LOW_CAP = 50
 
 -- Water tile IDs
 local WaterIds = {
@@ -120,7 +121,7 @@ local function GetPlayerCurrentCap()
 end
 
 local function PlayerHasCap()
-  return GetPlayerCurrentCap() > 1850
+  return GetPlayerCurrentCap() > PLAYER_LOW_CAP
 end
 
 local function caughtAFish()
