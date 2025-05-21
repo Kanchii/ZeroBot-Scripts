@@ -1,4 +1,5 @@
 -- Refactored AutoFishing Script
+dofile("_lib/auto_fish_helper.lua")
 
 -- Constants
 local MAX_SELL_COUNT = 100
@@ -60,14 +61,72 @@ local FishingSpots = {
   [5] = { x = 1233, y = 729, z = 7 },
 }
 
+local function hasAnyFishToSell()
+  for id, info in pairs(ItemsThatCanBeCaught) do
+    if info.name == "winterberry liquor" then
+      goto next
+    end
+    local count = Game.getItemCount(id)
+    if count > 0 then
+      return true
+    end
+    ::next::
+  end
+  return false
+end
+
+local function sellItems()
+  while hasAnyFishToSell() do
+    for id, info in pairs(ItemsThatCanBeCaught) do
+      local count = Game.getItemCount(id)
+      if count > 0 then
+        for i = 1, math.ceil(count / MAX_SELL_COUNT) do
+          Npc.sell(id, MAX_SELL_COUNT, true)
+          wait(650)
+        end
+      end
+    end
+  end
+end
+
+local function SellFishes()
+  if Player.getState(PZ_STATE) and FindNearbyNpc("fisherman", CHECK_RANGE) then
+    Client.showMessage("Vendendo todo o loot...")
+    gameTalk("hi", 1)
+    wait(500)
+    gameTalk("trade", 12)
+    wait(1000)
+    sellItems()
+    Client.showMessage("\n\n\n\n\n\nItems vendidos com sucesso :)")
+  end
+end
+
+local function DepositAllGold()
+  if Player.getState(PZ_STATE) then
+    gameTalk("!deposit all", 1)
+  end
+end
+
+local function BuyWorms()
+  if Player.getState(PZ_STATE) and FindNearbyNpc("lubo", CHECK_RANGE) then
+    Client.showMessage("Comprando minhoca...")
+    gameTalk("hi", 1)
+    wait(500)
+    gameTalk("trade", 12)
+    wait(1000)
+    BuyItems(WORM_ID, 1000)
+    Client.showMessage("\n\n\n\n\n\nMinhoca comprada com sucesso :)")
+  end
+end
+
 local RefilSpots = {
-  [1] = { x = 1196, y = 679, z = 7}, -- Escada pra vender peixe
-  [2] = { x = 1203, y = 670, z = 8}, -- Vender peixe
-  [3] = { x = 1196, y = 679, z = 8}, -- Escada pro andar de cima
-  [4] = { x = 1174, y = 683, z = 7}, -- Comprar minhoca
-  [5] = { x = 1176, y = 676, z = 7}, -- Andar de cima
-  [6] = { x = 1173, y = 676, z = 6}, -- Comprar minhoca
-  [7] = { x = 1176, y = 676, z = 6}, -- Comprar minhoca
+  [1] = { x = 1196, y = 679, z = 7, func = nil }, -- Escada pra vender peixe
+  [2] = { x = 1203, y = 670, z = 8, func = SellFishes }, -- Vender peixe
+  [3] = { x = 1196, y = 679, z = 8, func = nil }, -- Escada pro andar de cima
+  [4] = { x = nil, y = nil, z = nil, func = DepositAllGold }, -- Depositar dinheiro
+  [5] = { x = 1176, y = 676, z = 7, func = nil }, -- Andar de cima
+  [6] = { x = 1173, y = 676, z = 6, func = BuyWorms }, -- Comprar minhoca
+  [7] = { x = 1176, y = 676, z = 6, func = nil }, -- Andar de baixo
 }
 
 -- Runtime variables
@@ -91,23 +150,6 @@ local function isWaterTile(x, y, z)
     if WaterIds[tostring(thing.id)] then return true end
   end
   return false
-end
-
-local function IsNear(posA, posB, MAX_DISTANCE)
-  local distanceX = math.abs(posA.x - posB.x)
-  local distanceY = math.abs(posA.y - posB.y)
-
-  return math.max(distanceX, distanceY) <= MAX_DISTANCE and posA.z == posB.z
-end
-
-local function findNearbyNpc(name)
-  for _, cid in ipairs(Map.getCreatureIds(true, false) or {}) do
-    local creature = Creature(cid)
-    if creature:getName() == name and IsNear(Creature(Player.getId()):getPosition(), creature:getPosition(), CHECK_RANGE) then
-      return creature
-    end
-  end
-  return nil
 end
 
 local function updateHUD()
@@ -168,77 +210,7 @@ local function setupInitialStock()
   end
 end
 
-local function hasAnyFishToSell()
-  for id, info in pairs(ItemsThatCanBeCaught) do
-    if info.name == "winterberry liquor" then
-      goto next
-    end
-    local count = Game.getItemCount(id)
-    if count > 0 then
-      return true
-    end
-    ::next::
-  end
-  return false
-end
 
-local function sellItems()
-  while hasAnyFishToSell() do
-    for id, info in pairs(ItemsThatCanBeCaught) do
-      local count = Game.getItemCount(id)
-      if count > 0 then
-        for i = 1, math.ceil(count / MAX_SELL_COUNT) do
-          Npc.sell(id, MAX_SELL_COUNT, true)
-          wait(650)
-        end
-      end
-    end
-  end
-end
-
-local function SellFishes()
-  if Player.getState(PZ_STATE) and findNearbyNpc("fisherman") then
-    Client.showMessage("Vendendo todo o loot...")
-    gameTalk("hi", 1)
-    wait(500)
-    gameTalk("trade", 12)
-    wait(1000)
-    sellItems()
-    Client.showMessage("\n\n\n\n\n\nItems vendidos com sucesso :)")
-  end
-end
-
-local function depositAllGold()
-  if Player.getState(PZ_STATE) and findNearbyNpc("muzir") then
-    Client.showMessage("Depositando todo o gold...")
-    gameTalk("hi", 1)
-    wait(500)
-    gameTalk("deposit all", 12)
-    wait(1000)
-    gameTalk("yes", 12)
-    Client.showMessage("\n\n\n\n\n\nGold depositado com sucesso :)")
-  end
-end
-
-local function buyItems(itemId, itemQuantity)
-  local totalItemCount = Game.getItemCount(itemId)
-  local totalToBuy = math.max(0, itemQuantity - totalItemCount)
-  if totalToBuy > 0 then
-    Npc.buy(itemId, totalToBuy, false, false)
-  end
-end
-
-local function buyWorms()
-  if Player.getState(PZ_STATE) and findNearbyNpc("lubo") then
-    Client.showMessage("Comprando minhoca...")
-    gameTalk("hi", 1)
-    wait(500)
-    gameTalk("trade", 12)
-    wait(1000)
-    buyItems(WORM_ID, 1000)
-    Client.showMessage("\n\n\n\n\n\nMinhoca comprada com sucesso :)")
-  end
-end
 
 local function IsPlayerInSpot(x, y, z)
   local playerPos = Creature(Player.getId()):getPosition()
@@ -246,43 +218,23 @@ local function IsPlayerInSpot(x, y, z)
 end
 
 local function PlayerGoTo(x, y, z)
-  Map.goTo(x, y, z)
-  while IsPlayerInSpot(x, y, z) == false do
+  repeat
+    Map.goTo(x, y, z)
     wait(1500)
-  end
+  until IsPlayerInSpot(x, y, z)
 end
 
+
+
 local function Refil()
-  local currentRefilStep = 1
-  -- Move to stair
-  PlayerGoTo(RefilSpots[currentRefilStep].x, RefilSpots[currentRefilStep].y, RefilSpots[currentRefilStep].z)
-  currentRefilStep = currentRefilStep + 1
-
-  -- Move close to NPC
-  PlayerGoTo(RefilSpots[currentRefilStep].x, RefilSpots[currentRefilStep].y, RefilSpots[currentRefilStep].z)
-  SellFishes()
-  currentRefilStep = currentRefilStep + 1
-  
-  -- Move to stair
-  PlayerGoTo(RefilSpots[currentRefilStep].x, RefilSpots[currentRefilStep].y, RefilSpots[currentRefilStep].z)
-  currentRefilStep = currentRefilStep + 1
-
-  -- Move to bank NPC
-  PlayerGoTo(RefilSpots[currentRefilStep].x, RefilSpots[currentRefilStep].y, RefilSpots[currentRefilStep].z)
-  currentRefilStep = currentRefilStep + 1
-  depositAllGold()
-
-  -- Move to stair
-  PlayerGoTo(RefilSpots[currentRefilStep].x, RefilSpots[currentRefilStep].y, RefilSpots[currentRefilStep].z)
-  currentRefilStep = currentRefilStep + 1
-
-  -- Move to tools NPC
-  PlayerGoTo(RefilSpots[currentRefilStep].x, RefilSpots[currentRefilStep].y, RefilSpots[currentRefilStep].z)
-  currentRefilStep = currentRefilStep + 1
-  buyWorms()
-
-  -- Move to stair
-  PlayerGoTo(RefilSpots[currentRefilStep].x, RefilSpots[currentRefilStep].y, RefilSpots[currentRefilStep].z)
+  for currentRefilStep = 1, #RefilSpots do
+    if RefilSpots[currentRefilStep].x ~= nil then
+      PlayerGoTo(RefilSpots[currentRefilStep].x, RefilSpots[currentRefilStep].y, RefilSpots[currentRefilStep].z)
+    end
+    if RefilSpots[currentRefilStep].func ~= nil then
+      RefilSpots[currentRefilStep].func()
+    end
+  end
 end
 
 local function StartFishing()
