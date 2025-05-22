@@ -1,22 +1,33 @@
--- Refactored AutoFishing Script
+-- AutoFishing refactored using class-based structure
+
+-- Load dependencies
+dofile("_lib/auto_fish_helper.lua")
+dofile("_lib/dump.lua")
 
 -- Constants
 local MAX_SELL_COUNT = 100
 local CHECK_RANGE = 4
 local PZ_STATE = 14
-local HUD_COLOR = {200, 200, 200}
 local HOTKEY_INTERVAL = 50
+local DELAY_BETWEEN_FISHING = 1100
+local WORM_ID = 3492
+local WORM_QUANTITY = 2000
+local PLAYER_LOW_CAP = 50
+local FISH_ID = 3578
+local LIQUOUR_ID = 30202
+local HUD_COLOR = {200, 200, 200}
+local HUD_X = 630
+local HUD_Y_START = 40
+local HUD_TEXT_DIST = 30
+local FISHING_ROD_ID = 3483
 
 -- Water tile IDs
-local WaterIds = {
-  ["629"] = true, ["4597"] = true, ["4598"] = true, ["4599"] = true,
+local WaterIds = { ["629"] = true, ["4597"] = true, ["4598"] = true, ["4599"] = true,
   ["4600"] = true, ["4601"] = true, ["4602"] = true, ["4609"] = true,
   ["4610"] = true, ["4611"] = true, ["4612"] = true, ["4613"] = true,
-  ["4614"] = true,
-}
+  ["4614"] = true }
 
--- Fishable items configuration
-local ItemsThatCanBeCaught = {
+local FishIdList = {
   ["281"] = { name = "giant shimmering pearl", price = 4000 },
   ["282"] = { name = "giant shimmering pearl", price = 5000 },
   ["901"] = { name = "marlin", price = 1000 },
@@ -46,173 +57,226 @@ local ItemsThatCanBeCaught = {
   ["45012"] = { name = "scarlet fish", price = 1000 },
   ["45013"] = { name = "crimson squid", price = 25000 },
 }
--- local posturado = Creature(Player.getId()):getPosition()
--- Client.showMessage("\n\n\n\n\n\n" .. tostring(posturado.x) .. " " .. tostring(posturado.y) .. " " .. tostring(posturado.z))
 
+-- Fishing spots
 local FishingSpots = {
-  [1] = { x = 1155, y = 730, z = 7 },
-  [2] = { x = 1175, y = 729, z = 7 },
-  [3] = { x = 1196, y = 729, z = 7 },
-  [4] = { x = 1214, y = 730, z = 7 },
-  [5] = { x = 1233, y = 729, z = 7 },
+  {x = 1155, y = 730, z = 7},
+  {x = 1175, y = 729, z = 7},
+  {x = 1196, y = 729, z = 7},
+  {x = 1214, y = 730, z = 7},
+  {x = 1233, y = 729, z = 7},
 }
 
--- Runtime variables
-local totalFishValue = 0
-local startTime = nil
-local waterPositions = {}
-local lowCap = false
-local currentSpot = 0
-local currentWaterTile = 1
-
--- HUD Setup
-local X, Y = 630, 10
-local TEXT_DIST = 30
-local totalFishValueHUD = HUD.new(X, Y + TEXT_DIST, "Total: $0")
-totalFishValueHUD:setColor(unpack(HUD_COLOR))
-local meanFishValueHUD = HUD.new(X, Y + 2 * TEXT_DIST, "Profit/H: $0")
-meanFishValueHUD:setColor(unpack(HUD_COLOR))
-
--- Helpers
-local function isWaterTile(x, y, z)
-  for _, thing in pairs(Map.getThings(x, y, z)) do
-    if WaterIds[tostring(thing.id)] then return true end
+-- Utility function to iterate caught items
+local function ForEachFishId(callback)
+  local result = false
+  for id, item in pairs(FishIdList) do
+    result = result or callback(id, item)
   end
-  return false
+  return result
 end
 
-local function IsNear(posA, posB, MAX_DISTANCE)
-  local distanceX = math.abs(posA.x - posB.x)
-  local distanceY = math.abs(posA.y - posB.y)
-
-  return math.max(distanceX, distanceY) <= MAX_DISTANCE and posA.z == posB.z
-end
-
-local function findNearbyNpc(name)
-  for _, cid in ipairs(Map.getCreatureIds(true, false) or {}) do
-    local creature = Creature(cid)
-    if creature:getName() == name and IsNear(Creature(Player.getId()):getPosition(), creature:getPosition(), CHECK_RANGE) then
-      return creature
-    end
-  end
-  return nil
-end
-
-local function updateHUD()
-  totalFishValueHUD:setText("Total: $" .. totalFishValue)
-  local elapsed = math.max(os.difftime(os.time(), startTime), 1)
-  meanFishValueHUD:setText("Profit/H: $" .. math.floor((totalFishValue / elapsed) * 3600))
-end
-
-local function caughtAFish()
-  for id, info in pairs(ItemsThatCanBeCaught) do
-    local newQty = Game.getItemCount(id)
-    info.quantity = info.quantity or 0
-    if newQty ~= info.quantity then
-      totalFishValue = totalFishValue + info.price
-      info.quantity = newQty
-      updateHUD()
-      if Player.getCapacity() <= 5000 then
-        Sound.play(Engine.getScriptsDirectory() .. "/sounds/AlarmLowCap.wav")
-        lowCap = true
-      end
-      return true
-    end
-  end
-  return false
-end
-
-local function buildWaterPositions()
-  local pos = Creature(Player.getId()):getPosition()
-  waterPositions = {}
-  for dx = -7, 7 do
-    for dy = -5, 5 do
-      local x, y, z = pos.x + dx, pos.y + dy, pos.z
-      if isWaterTile(x, y, z) then
-        table.insert(waterPositions, {x = x, y = y, z = z})
-      end
-    end
-  end
-end
-
-local function fishAt(idx)
-  local pos = waterPositions[idx]
-  if pos then
-    Game.useItemOnGround(3483, pos.x, pos.y, pos.z)
-    wait(1000)
-  end
-end
-
-local function setupInitialStock()
-  for id in pairs(ItemsThatCanBeCaught) do
-    ItemsThatCanBeCaught[id].quantity = Game.getItemCount(id)
-  end
-end
-
-local function sellItems()
-  for id, info in pairs(ItemsThatCanBeCaught) do
-    local count = Game.getItemCount(id)
-    if count > 0 then
-      for i = 1, math.ceil(count / MAX_SELL_COUNT) do
-        Npc.sell(id, MAX_SELL_COUNT, true)
-        wait(650)
-      end
-    end
-  end
-end
-
-local function sellFishes()
-  if Player.getState(PZ_STATE) and findNearbyNpc("fisherman") then
-    Client.showMessage("Vendendo todo o loot...")
+-- Refil steps
+local function SellFishes()
+  if Player.getState(PZ_STATE) and FindNearbyNpc("fisherman", CHECK_RANGE) then
     gameTalk("hi", 1)
     wait(500)
     gameTalk("trade", 12)
-    wait(500)
-    sellItems()
-    Client.showMessage("\n\n\n\n\n\nItems vendidos com sucesso :)")
+    wait(1000)
+    ForEachFishId(function(id, item)
+      if item.name ~= "winterberry liquor" and Game.getItemCount(id) > 0 then
+        for i = 1, math.ceil(Game.getItemCount(id) / MAX_SELL_COUNT) do
+          Npc.sell(id, MAX_SELL_COUNT, true)
+          wait(650)
+        end
+      end
+    end)
   end
 end
 
-local function IsPlayerInFishingSpot()
-  local playerPos = Creature(Player.getId()):getPosition()
-  local fishingSpot = currentSpot + 1
-  return playerPos.x == FishingSpots[fishingSpot].x and playerPos.y == FishingSpots[fishingSpot].y and playerPos.z == FishingSpots[fishingSpot].z
+local function DepositAllGold()
+  if Player.getState(PZ_STATE) then
+    gameTalk("!deposit all", 1)
+  end
 end
 
-local function startFishing()
-  lowCap = false
-  while true do
-    local fishingSpot = currentSpot + 1
-    Map.goTo(FishingSpots[fishingSpot].x, FishingSpots[fishingSpot].y, FishingSpots[fishingSpot].z)
-    while IsPlayerInFishingSpot() == false do
-      wait(2000)
+local function BuyWorms()
+  if Player.getState(PZ_STATE) and FindNearbyNpc("lubo", CHECK_RANGE) then
+    gameTalk("hi", 1)
+    wait(500)
+    gameTalk("trade", 12)
+    wait(1000)
+    BuyItems(WORM_ID, WORM_QUANTITY)
+  end
+end
+
+local RefilSpots = {
+  { x = 1196, y = 679, z = 7, func = nil },
+  { x = 1203, y = 670, z = 8, func = SellFishes },
+  { x = 1196, y = 679, z = 8, func = nil },
+  { x = nil, y = nil, z = nil, func = DepositAllGold },
+  { x = 1176, y = 676, z = 7, func = nil },
+  { x = 1173, y = 676, z = 6, func = BuyWorms },
+  { x = 1176, y = 676, z = 6, func = nil },
+}
+
+-- FishingBot class
+local FishingBot = {}
+FishingBot.__index = FishingBot
+
+function FishingBot:new()
+  local self = setmetatable({}, FishingBot)
+  self.coordsFilePath = Engine.getScriptsDirectory() .. "/fishing_last_record.json"
+  self.totalFishValue = 0
+  self.currentSpot = 0
+  self.currentWaterTile = 1
+  self.waterPositions = {}
+  self.startTime = nil
+  self.totalFishValueHUD = HUD.new(HUD_X, HUD_Y_START, "Total: $0")
+  self.totalFishValueHUD:setColor(unpack(HUD_COLOR))
+  self.meanFishValueHUD = HUD.new(HUD_X, HUD_Y_START + HUD_TEXT_DIST, "Profit/H: $0")
+  self.meanFishValueHUD:setColor(unpack(HUD_COLOR))
+  return self
+end
+
+function FishingBot:LoadCoords()
+  local file = io.open(self.coordsFilePath)
+	if not file then return nil end
+	local content = file:read "*a"
+	file:close()
+  local coords = JSON.decode(content)
+	self.currentSpot = coords.currentSpot
+  self.currentWaterTile = coords.currentWaterTile
+end
+
+function FishingBot:SaveCoords()
+  local coords = {
+    currentSpot = self.currentSpot,
+    currentWaterTile = self.currentWaterTile
+  }
+  local file = io.open(self.coordsFilePath, "w")
+	file:write(JSON.encode(coords))
+	file:close()
+end
+
+function FishingBot:PlayerNeedRefil()
+  return math.floor(Player.getCapacity() / 100) <= PLAYER_LOW_CAP or Game.getItemCount(WORM_ID) <= 0
+end
+
+function FishingBot:BuildWaterPositions()
+  local pos = Creature(Player.getId()):getPosition()
+  self.waterPositions = {}
+  for dx = -7, 7 do
+    for dy = -5, 5 do
+      local x, y, z = pos.x + dx, pos.y + dy, pos.z
+      for _, thing in pairs(Map.getThings(x, y, z)) do
+        if WaterIds[tostring(thing.id)] then
+          table.insert(self.waterPositions, {x = x, y = y, z = z})
+          break
+        end
+      end
     end
-    startTime = startTime or os.time()
-    setupInitialStock()
-    buildWaterPositions()
+  end
+end
+
+function FishingBot:FishAt(idx)
+  local pos = self.waterPositions[idx]
+  if pos then
+    Game.useItemOnGround(FISHING_ROD_ID, pos.x, pos.y, pos.z)
+    wait(DELAY_BETWEEN_FISHING)
+  end
+end
+
+function FishingBot:UpdateHUD()
+  self.totalFishValueHUD:setText("Total: $" .. self.totalFishValue)
+  local elapsed = math.max(os.difftime(os.time(), self.startTime), 1)
+  self.meanFishValueHUD:setText("Profit/H: $" .. math.floor((self.totalFishValue / elapsed) * 3600))
+end
+
+function FishingBot:TrackCatch()
+  return ForEachFishId(function(id, info)
+    local newQty = Game.getItemCount(id)
+    info.quantity = info.quantity or 0
+    if newQty ~= info.quantity then
+      self.totalFishValue = self.totalFishValue + info.price
+      info.quantity = newQty
+      self:UpdateHUD()
+      return true
+    end
+    return false
+  end)
+end
+
+function FishingBot:SetupInitialStock()
+  ForEachFishId(function(id, info)
+    info.quantity = Game.getItemCount(id)
+  end)
+end
+
+function FishingBot:DropTrash()
+  local containers = Player.getContainers()
+  for _, v in pairs(containers) do
+    local container = Container(v)
+    for i = #container:getItems(), 1, -1 do
+      local item = container:getItems()[i]
+      if item.id == FISH_ID or item.id == LIQUOUR_ID then
+        container:moveItemToGround(i - 1, item.count, self.waterPositions[1].x, self.waterPositions[1].y, self.waterPositions[1].z)
+        wait(250)
+      end
+    end
+  end
+end
+
+function FishingBot:GoTo(x, y, z)
+  repeat
+    Map.goTo(x, y, z)
+    wait(1500)
+    local player = Creature(Player.getId())
+    local pos = player:getPosition()
+  until (pos.x == x and pos.y == y) or pos.z ~= z
+end
+
+function FishingBot:Refil()
+  for _, step in ipairs(RefilSpots) do
+    if step.x then self:GoTo(step.x, step.y, step.z) end
+    if step.func then step.func() end
+  end
+end
+
+
+
+function FishingBot:Start()
+  self:LoadCoords()
+  while true do
+    if self:PlayerNeedRefil() then self:Refil() end
+    local spot = FishingSpots[self.currentSpot + 1]
+    self:GoTo(spot.x, spot.y, spot.z)
+    self.startTime = self.startTime or os.time()
+    self:SetupInitialStock()
+    self:BuildWaterPositions()
+
     local tries = 0
-    while currentWaterTile <= #waterPositions and lowCap == false do
-      fishAt(currentWaterTile)
+    while self.currentWaterTile <= #self.waterPositions and not self:PlayerNeedRefil() do
+      self:FishAt(self.currentWaterTile)
       tries = tries + 1
-      if caughtAFish() or tries >= 15 then
-        currentWaterTile = currentWaterTile + 1
+      if self:TrackCatch() or tries >= 15 then
+        self.currentWaterTile = self.currentWaterTile + 1
+        self:SaveCoords()
         tries = 0
       end
     end
-    if currentWaterTile > #waterPositions then
-      currentSpot = (currentSpot + 1) % 5
-      currentWaterTile = 1
+
+    if self.currentWaterTile > #self.waterPositions then
+      self.currentSpot = (self.currentSpot + 1) % #FishingSpots
+      self.currentWaterTile = 1
     end
-    Client.showMessage("\n\n\n\n\n\nTodos os spots foram pescados :)")
-    Sound.play(Engine.getScriptsDirectory() .. "/sounds/Alarm Clock.wav")
-    if lowCap == true then
-      break
-    end
+    
+    self:SaveCoords()
+    self:DropTrash()
   end
 end
 
--- Register hotkeys
-local function bindHotkey(combo, name, callback)
+local function BindHotkey(combo, name, callback)
   local ok, mods, key = HotkeyManager.parseKeyCombination(combo)
   if ok then
     Timer(name, function()
@@ -223,10 +287,10 @@ local function bindHotkey(combo, name, callback)
   end
 end
 
-bindHotkey("ctrl+shift+K", "StartFishing", startFishing)
-bindHotkey("ctrl+shift+V", "SellFishes", sellFishes)
-
--- Debug print message hook
--- Game.registerEvent(Game.Events.TEXT_MESSAGE, function(data)
---   print(data.text)
--- end)
+-- Entry
+local bot = FishingBot:new()
+BindHotkey("ctrl+shift+K", "StartFishing", function() bot:Start() end)
+BindHotkey("ctrl+shift+B", "ShowPosition", function()
+  local pos = Creature(Player.getId()):getPosition()
+  Client.showMessage("x = " .. pos.x .. " y = " .. pos.y .. " z = " .. pos.z)
+end)
