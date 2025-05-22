@@ -11,7 +11,7 @@ local PZ_STATE = 14
 local HOTKEY_INTERVAL = 50
 local DELAY_BETWEEN_FISHING = 1100
 local WORM_ID = 3492
-local WORM_QUANTITY = 1500
+local WORM_QUANTITY = 2000
 local PLAYER_LOW_CAP = 50
 local FISH_ID = 3578
 local LIQUOUR_ID = 30202
@@ -126,6 +126,7 @@ FishingBot.__index = FishingBot
 
 function FishingBot:new()
   local self = setmetatable({}, FishingBot)
+  self.coordsFilePath = Engine.getScriptsDirectory() .. "/fishing_last_record.json"
   self.totalFishValue = 0
   self.currentSpot = 0
   self.currentWaterTile = 1
@@ -138,8 +139,28 @@ function FishingBot:new()
   return self
 end
 
-function FishingBot:PlayerHasCap()
-  return math.floor(Player.getCapacity() / 100) > PLAYER_LOW_CAP
+function FishingBot:LoadCoords()
+  local file = io.open(self.coordsFilePath)
+	if not file then return nil end
+	local content = file:read "*a"
+	file:close()
+  local coords = JSON.decode(content)
+	self.currentSpot = coords.currentSpot
+  self.currentWaterTile = coords.currentWaterTile
+end
+
+function FishingBot:SaveCoords()
+  local coords = {
+    currentSpot = self.currentSpot,
+    currentWaterTile = self.currentWaterTile
+  }
+  local file = io.open(self.coordsFilePath, "w")
+	file:write(JSON.encode(coords))
+	file:close()
+end
+
+function FishingBot:PlayerNeedRefil()
+  return math.floor(Player.getCapacity() / 100) <= PLAYER_LOW_CAP or Game.getItemCount(WORM_ID) <= 0
 end
 
 function FishingBot:BuildWaterPositions()
@@ -222,9 +243,12 @@ function FishingBot:Refil()
   end
 end
 
+
+
 function FishingBot:Start()
+  self:LoadCoords()
   while true do
-    if not self:PlayerHasCap() then self:Refil() end
+    if self:PlayerNeedRefil() then self:Refil() end
     local spot = FishingSpots[self.currentSpot + 1]
     self:GoTo(spot.x, spot.y, spot.z)
     self.startTime = self.startTime or os.time()
@@ -232,11 +256,12 @@ function FishingBot:Start()
     self:BuildWaterPositions()
 
     local tries = 0
-    while self.currentWaterTile <= #self.waterPositions and self:PlayerHasCap() do
+    while self.currentWaterTile <= #self.waterPositions and not self:PlayerNeedRefil() do
       self:FishAt(self.currentWaterTile)
       tries = tries + 1
       if self:TrackCatch() or tries >= 15 then
         self.currentWaterTile = self.currentWaterTile + 1
+        self:SaveCoords()
         tries = 0
       end
     end
@@ -245,7 +270,8 @@ function FishingBot:Start()
       self.currentSpot = (self.currentSpot + 1) % #FishingSpots
       self.currentWaterTile = 1
     end
-
+    
+    self:SaveCoords()
     self:DropTrash()
   end
 end
