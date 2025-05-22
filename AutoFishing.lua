@@ -1,14 +1,12 @@
 -- AutoFishing refactored using class-based structure
 
 -- Load dependencies
-dofile("_lib/auto_fish_helper.lua")
-dofile("_lib/dump.lua")
+dofile("_lib/helper.lua")
 
 -- Constants
 local MAX_SELL_COUNT = 100
 local CHECK_RANGE = 4
 local PZ_STATE = 14
-local HOTKEY_INTERVAL = 50
 local DELAY_BETWEEN_FISHING = 1100
 local WORM_ID = 3492
 local WORM_QUANTITY = 2000
@@ -273,17 +271,6 @@ function FishingBot:Start()
     
     self:SaveCoords()
     self:DropTrash()
-  end
-end
-
-local function BindHotkey(combo, name, callback)
-  local ok, mods, key = HotkeyManager.parseKeyCombination(combo)
-  if ok then
-    Timer(name, function()
-      if Client.isKeyPressed(key, mods) then callback() end
-    end, HOTKEY_INTERVAL)
-  else
-    print("Combinação de teclas inválida para " .. name)
   end
 end
 
