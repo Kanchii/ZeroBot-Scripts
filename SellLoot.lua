@@ -5,10 +5,10 @@ local CHECK_RANGE = 4
 local MAX_SELL_COUNT = 100
 local ITEM_TO_SELL_FILE_PATH = Engine.getScriptsDirectory() .. "/items_to_sell.json"
 
-local itemsList = {}
+local itemsList = JSON.decode(ReadFile(ITEM_TO_SELL_FILE_PATH))
 
-local function ItemAlreadyAdded(id)
-  for idx, item in pairs(itemsList) do
+local function IsItemSellable(id)
+  for _, item in ipairs(itemsList) do
     if item["id"] == id then
       return true
     end
@@ -16,32 +16,26 @@ local function ItemAlreadyAdded(id)
   return false
 end
 
-local function ForEachItemId(callback)
-  local result = false
-  for id, item in pairs(itemsList) do
-    result = result or callback(id, item)
-  end
-  return result
-end
-
 local function SellItems()
   if Player.getState(PZ_STATE) and FindNearbyNpc("jimo rico", CHECK_RANGE) then
-    itemsList = JSON.decode(ReadFile(ITEM_TO_SELL_FILE_PATH))
     gameTalk("hi", 1)
     wait(500)
     gameTalk("trade", 12)
     wait(1000)
-		for _, item in pairs(itemsList) do
+		for _, item in ipairs(itemsList) do
       local id = item["id"]
-      if Game.getItemCount(id) > 0 then -- Otimizar isso aqui pq ta travando o bagulho
-        for i = 1, math.ceil(Game.getItemCount(id) / MAX_SELL_COUNT) do
-          Npc.sell(id, MAX_SELL_COUNT, true)
-          wait(650)
+      local playerItems = Game.getInventoryItems()
+      for _, playerItem in ipairs(playerItems) do
+        if IsItemSellable(playerItem.id) then
+          for i = 1, math.ceil(Game.getItemCount(id) / MAX_SELL_COUNT) do
+            Npc.sell(id, MAX_SELL_COUNT, true)
+            wait(650)
+          end
         end
       end
     end
 
-    WriteFile(ITEM_TO_SELL_FILE_PATH, JSON.encode(itemsList)) -- <- Need to fix this save
+    WriteFile(ITEM_TO_SELL_FILE_PATH, JSON.encode(itemsList))
     Client.showMessage("\n\n\nTodos os items foram vendidos :)")
   end
 end
@@ -59,7 +53,7 @@ local function onInternalTalk(authorName, authorLevel, type, x, y, z, text, chan
           for itemId in string.gmatch(text, "(%d+)") do
             local itemIdAsInt = tonumber(itemId)
         
-            if not ItemAlreadyAdded(itemIdAsInt) then
+            if not IsItemSellable(itemIdAsInt) then
               table.insert(itemsList, { id = itemIdAsInt })
               wait(100)
             end
