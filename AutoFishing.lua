@@ -109,13 +109,13 @@ local function BuyWorms()
 end
 
 local RefilSpots = {
-  { x = 1196, y = 679, z = 7, func = nil },
-  { x = 1203, y = 670, z = 8, func = SellFishes },
-  { x = 1196, y = 679, z = 8, func = nil },
-  { x = nil, y = nil, z = nil, func = DepositAllGold },
-  { x = 1176, y = 676, z = 7, func = nil },
-  { x = 1173, y = 676, z = 6, func = BuyWorms },
-  { x = 1176, y = 676, z = 6, func = nil },
+  { name = "floor -1", x = 1196, y = 679, z = 7, func = nil },
+  { name = "sell fish", x = 1203, y = 670, z = 8, func = SellFishes },
+  { name = "go templo", x = 1196, y = 679, z = 8, func = nil },
+  { name = "deposit gold", x = nil, y = nil, z = nil, func = DepositAllGold },
+  { name = "floor +1", x = 1176, y = 676, z = 7, func = nil },
+  { name = "buy worm", x = 1173, y = 676, z = 6, func = BuyWorms },
+  { name = "go templo", x = 1176, y = 676, z = 6, func = nil },
 }
 
 -- FishingBot class
@@ -130,6 +130,7 @@ function FishingBot:new()
   self.currentWaterTile = 1
   self.waterPositions = {}
   self.startTime = nil
+  self.stop = false
   self.totalFishValueHUD = HUD.new(HUD_X, HUD_Y_START, "Total: $0")
   self.totalFishValueHUD:setColor(unpack(HUD_COLOR))
   self.meanFishValueHUD = HUD.new(HUD_X, HUD_Y_START + HUD_TEXT_DIST, "Profit/H: $0")
@@ -234,16 +235,23 @@ function FishingBot:GoTo(x, y, z)
   until (pos.x == x and pos.y == y) or pos.z ~= z
 end
 
-function FishingBot:Refil()
+function FishingBot:Refil(stopping)
+  stopping = stopping or false
   for _, step in ipairs(RefilSpots) do
     if step.x then self:GoTo(step.x, step.y, step.z) end
     if step.func then step.func() end
+    if stopping and step.name == "deposit gold" then
+      break
+    end
   end
 end
 
-
+function FishingBot:Stop()
+  self:Refil(true)
+end
 
 function FishingBot:Start()
+  self.stop = false
   self:LoadCoords()
   while true do
     if self:PlayerNeedRefil() then self:Refil() end
@@ -277,6 +285,7 @@ end
 -- Entry
 local bot = FishingBot:new()
 BindHotkey("ctrl+shift+K", "StartFishing", function() bot:Start() end)
+BindHotkey("ctrl+shift+J", "StopFishing", function() bot:Stop() end)
 BindHotkey("ctrl+shift+B", "ShowPosition", function()
   local pos = Creature(Player.getId()):getPosition()
   Client.showMessage("x = " .. pos.x .. " y = " .. pos.y .. " z = " .. pos.z)
