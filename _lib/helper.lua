@@ -8,7 +8,7 @@ end
 function FindNearbyNpc(name, range)
   for _, cid in ipairs(Map.getCreatureIds(true, false) or {}) do
     local creature = Creature(cid)
-    if creature:getName() == name and IsNear(Creature(Player.getId()):getPosition(), creature:getPosition(), range) then
+    if creature:getName():lower() == name:lower() and IsNear(Creature(Player.getId()):getPosition(), creature:getPosition(), range) then
       return creature
     end
   end
