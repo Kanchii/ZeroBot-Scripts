@@ -108,26 +108,27 @@ local function BuyWorms()
   end
 end
 
-local RefilSpots = {
-  { name = "floor -1", x = 1196, y = 679, z = 7, func = nil },
-  { name = "sell fish", x = 1203, y = 670, z = 8, func = SellFishes },
-  { name = "go templo", x = 1196, y = 679, z = 8, func = nil },
-  { name = "deposit gold", x = nil, y = nil, z = nil, func = DepositAllGold },
-  { name = "floor +1", x = 1176, y = 676, z = 7, func = nil },
-  { name = "buy worm", x = 1173, y = 676, z = 6, func = BuyWorms },
-  { name = "go templo", x = 1176, y = 676, z = 6, func = nil },
-}
+local RefilSpots = {}
 
 -- FishingBot class
 local FishingBot = {}
 FishingBot.__index = FishingBot
 
-function FishingBot:new()
+function FishingBot:LoadFishingSpots(area, region)
+  self.fishingSpotObject = JSON.decode(ReadFile(Engine.getScriptsDirectory() .. "/fishing_spots.json"))
+  local choosenArea = self.fishingSpotObject[area]
+  FishingSpots = choosenArea[region]["coords"]
+  RefilSpots = self.fishingSpotObject[area]["refil"]
+  self.currentSpot = choosenArea[region]["last_spot"].spot
+  self.currentWaterTile = choosenArea[region]["last_spot"].water_spot
+end
+
+function FishingBot:new(area, region)
   local self = setmetatable({}, FishingBot)
-  self.coordsFilePath = Engine.getScriptsDirectory() .. "/fishing_last_record.json"
+  self.area = area
+  self.region = region
   self.totalFishValue = 0
-  self.currentSpot = 0
-  self.currentWaterTile = 1
+  self:LoadFishingSpots(area, region)
   self.waterPositions = {}
   self.startTime = nil
   self.stop = false
@@ -138,24 +139,12 @@ function FishingBot:new()
   return self
 end
 
-function FishingBot:LoadCoords()
-  local file = io.open(self.coordsFilePath)
-	if not file then return nil end
-	local content = file:read "*a"
-	file:close()
-  local coords = JSON.decode(content)
-	self.currentSpot = coords.currentSpot
-  self.currentWaterTile = coords.currentWaterTile
-end
-
 function FishingBot:SaveCoords()
-  local coords = {
-    currentSpot = self.currentSpot,
-    currentWaterTile = self.currentWaterTile
+  self.fishingSpotObject[self.area][self.region]["last_spot"] = {
+    spot = self.currentSpot,
+    water_spot = self.currentWaterTile
   }
-  local file = io.open(self.coordsFilePath, "w")
-	file:write(JSON.encode(coords))
-	file:close()
+  WriteFile(Engine.getScriptsDirectory() .. "/fishing_spots.json", JSON.encode(self.fishingSpotObject))
 end
 
 function FishingBot:PlayerNeedRefil()
@@ -235,11 +224,38 @@ function FishingBot:GoTo(x, y, z)
   until (pos.x == x and pos.y == y) or pos.z ~= z
 end
 
+function GetRefilFunction(refilName)
+  if name == "sell fish" then
+    return SellFishes
+  else
+    if name == "buy worm" then
+      return BuyWorms
+    else
+      if name == "deposit gold" then
+        return DepositAllGold
+      end
+    end
+  end
+
+  return nil
+end
+
 function FishingBot:Refil(stopping)
   stopping = stopping or false
   for _, step in ipairs(RefilSpots) do
     if step.x then self:GoTo(step.x, step.y, step.z) end
-    if step.func then step.func() end
+    if step.name == "sell fish" then
+      SellFishes()
+    else
+      if step.name == "buy worm" then
+        BuyWorms()
+      else
+        if step.name == "deposit gold" then
+          DepositAllGold()
+        end
+      end
+    end
+
     if stopping and step.name == "deposit gold" then
       break
     end
@@ -251,8 +267,6 @@ function FishingBot:Stop()
 end
 
 function FishingBot:Start()
-  self.stop = false
-  self:LoadCoords()
   while true do
     if self:PlayerNeedRefil() then self:Refil() end
     local spot = FishingSpots[self.currentSpot + 1]
@@ -265,28 +279,48 @@ function FishingBot:Start()
     while self.currentWaterTile <= #self.waterPositions and not self:PlayerNeedRefil() do
       self:FishAt(self.currentWaterTile)
       tries = tries + 1
-      if self:TrackCatch() or tries >= 15 then
+      if self:TrackCatch() or tries >= 10 then
         self.currentWaterTile = self.currentWaterTile + 1
         self:SaveCoords()
         tries = 0
       end
     end
-
     if self.currentWaterTile > #self.waterPositions then
       self.currentSpot = (self.currentSpot + 1) % #FishingSpots
       self.currentWaterTile = 1
     end
-    
     self:SaveCoords()
     self:DropTrash()
   end
 end
 
+local cm = nil
+local customModalButtons = {
+  [1] = { area = "vip", region = "south", name = "VIP - South" },
+  [2] = { area = "vip", region = "north", name = "VIP - North" },
+  [3] = { area = "free", region = "north", name = "Free - North" },
+}
+
+local function ChooseAreaAndRegion()
+  cm = CustomModalWindow("Fishing Spot", "Choose you fishing spot!")
+  for _, item in ipairs(customModalButtons) do
+    cm:addButton(item["name"])
+  end
+end
+
 -- Entry
-local bot = FishingBot:new()
-BindHotkey("ctrl+shift+K", "StartFishing", function() bot:Start() end)
+BindHotkey("ctrl+shift+K", "StartFishing", ChooseAreaAndRegion)
 BindHotkey("ctrl+shift+J", "StopFishing", function() bot:Stop() end)
 BindHotkey("ctrl+shift+B", "ShowPosition", function()
   local pos = Creature(Player.getId()):getPosition()
   Client.showMessage("x = " .. pos.x .. " y = " .. pos.y .. " z = " .. pos.z)
 end)
+
+function onAreaAndRegionChoice(modalId, buttonIndex)
+  local choice = customModalButtons[buttonIndex + 1]
+  cm:destroy()
+  local bot = FishingBot:new(choice.area, choice.region)
+  bot:Start()
+end
+
+Game.registerEvent(Game.Events.CUSTOM_MODAL_WINDOW_BUTTON_CLICK, onAreaAndRegionChoice)
