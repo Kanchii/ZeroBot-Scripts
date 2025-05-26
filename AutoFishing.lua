@@ -8,7 +8,7 @@ local MAX_SELL_COUNT = 100
 local CHECK_RANGE = 4
 local PZ_STATE = 14
 local DELAY_BETWEEN_FISHING = 1100
-local MAXIMUM_TRIES_TO_CATCH_FISH = 3
+local MAXIMUM_TRIES_TO_CATCH_FISH = 6
 local WORM_ID = 3492
 local WORM_QUANTITY = nil
 local PLAYER_LOW_CAP = 50
@@ -131,7 +131,21 @@ function FishingBot:new()
   local self = setmetatable({}, FishingBot)
 end
 
+function TurnOnOffDefaultUtilities()
+  if Engine.isTargetingEnabled() then
+    Engine.enableTargeting(false)
+  end
+  if Engine.isMagicShooterEnabled() then
+    Engine.enableMagicShooter(false)
+  end
+  if not Engine.isTimerEnabled() then
+    Engine.enableTimer(true)
+  end
+end
+
 function FishingBot:new(area, region)
+  TurnOnOffDefaultUtilities()
+
   local self = setmetatable({}, FishingBot)
   self.area = area
   self.region = region
