@@ -8,15 +8,16 @@ local MAX_SELL_COUNT = 100
 local CHECK_RANGE = 4
 local PZ_STATE = 14
 local DELAY_BETWEEN_FISHING = 1100
+local MAXIMUM_TRIES_TO_CATCH_FISH = 3
 local WORM_ID = 3492
-local WORM_QUANTITY = 2000
+local WORM_QUANTITY = nil
 local PLAYER_LOW_CAP = 50
 local FISH_ID = 3578
 local LIQUOUR_ID = 30202
 local HUD_COLOR = {200, 200, 200}
 local HUD_X = 630
-local HUD_Y_START = 40
-local HUD_TEXT_DIST = 30
+local HUD_Y_START = 30
+local HUD_TEXT_DIST = 20
 local FISHING_ROD_ID = 3483
 
 -- Water tile IDs
@@ -100,6 +101,9 @@ end
 
 local function BuyWorms()
   if Player.getState(PZ_STATE) and FindNearbyNpc("lubo", CHECK_RANGE) then
+    if WORM_QUANTITY == nil then
+      WORM_QUANTITY = math.ceil(GetPlayerCapacity() * 0.40)
+    end
     gameTalk("hi", 1)
     wait(500)
     gameTalk("trade", 12)
@@ -123,6 +127,10 @@ function FishingBot:LoadFishingSpots(area, region)
   self.currentWaterTile = choosenArea[region]["last_spot"].water_spot
 end
 
+function FishingBot:new()
+  local self = setmetatable({}, FishingBot)
+end
+
 function FishingBot:new(area, region)
   local self = setmetatable({}, FishingBot)
   self.area = area
@@ -132,10 +140,14 @@ function FishingBot:new(area, region)
   self.waterPositions = {}
   self.startTime = nil
   self.stop = false
+  self.tries = 0
+  self.totalFishesCatched = 0
   self.totalFishValueHUD = HUD.new(HUD_X, HUD_Y_START, "Total: $0")
   self.totalFishValueHUD:setColor(unpack(HUD_COLOR))
   self.meanFishValueHUD = HUD.new(HUD_X, HUD_Y_START + HUD_TEXT_DIST, "Profit/H: $0")
   self.meanFishValueHUD:setColor(unpack(HUD_COLOR))
+  self.meanTriesToCatchHUD = HUD.new(HUD_X, HUD_Y_START + 2 * HUD_TEXT_DIST, "Tentativas médias: 0")
+  self.meanTriesToCatchHUD:setColor(unpack(HUD_COLOR))
   return self
 end
 
@@ -179,6 +191,8 @@ function FishingBot:UpdateHUD()
   self.totalFishValueHUD:setText("Total: $" .. self.totalFishValue)
   local elapsed = math.max(os.difftime(os.time(), self.startTime), 1)
   self.meanFishValueHUD:setText("Profit/H: $" .. math.floor((self.totalFishValue / elapsed) * 3600))
+  local meanTriesToCatchFish = self.totalFishesCatched > 0 and self.tries / self.totalFishesCatched or 0
+  self.meanTriesToCatchHUD:setText("Tentativas médias: " .. string.format("%.2f", meanTriesToCatchFish))
 end
 
 function FishingBot:TrackCatch()
@@ -188,7 +202,6 @@ function FishingBot:TrackCatch()
     if newQty ~= info.quantity then
       self.totalFishValue = self.totalFishValue + info.price
       info.quantity = newQty
-      self:UpdateHUD()
       return true
     end
     return false
@@ -279,10 +292,13 @@ function FishingBot:Start()
     while self.currentWaterTile <= #self.waterPositions and not self:PlayerNeedRefil() do
       self:FishAt(self.currentWaterTile)
       tries = tries + 1
-      if self:TrackCatch() or tries >= 10 then
+      if self:TrackCatch() or tries >= MAXIMUM_TRIES_TO_CATCH_FISH then
         self.currentWaterTile = self.currentWaterTile + 1
         self:SaveCoords()
+        self.tries = self.tries + tries
+        self.totalFishesCatched = tries < MAXIMUM_TRIES_TO_CATCH_FISH and self.totalFishesCatched + 1 or self.totalFishesCatched
         tries = 0
+        self:UpdateHUD()
       end
     end
     if self.currentWaterTile > #self.waterPositions then
@@ -308,19 +324,21 @@ local function ChooseAreaAndRegion()
   end
 end
 
--- Entry
-BindHotkey("ctrl+shift+K", "StartFishing", ChooseAreaAndRegion)
-BindHotkey("ctrl+shift+J", "StopFishing", function() bot:Stop() end)
-BindHotkey("ctrl+shift+B", "ShowPosition", function()
-  local pos = Creature(Player.getId()):getPosition()
-  Client.showMessage("x = " .. pos.x .. " y = " .. pos.y .. " z = " .. pos.z)
-end)
+local bot = nil
 
+-- Entry
 function onAreaAndRegionChoice(modalId, buttonIndex)
   local choice = customModalButtons[buttonIndex + 1]
   cm:destroy()
-  local bot = FishingBot:new(choice.area, choice.region)
+  bot = FishingBot:new(choice.area, choice.region)
   bot:Start()
 end
 
 Game.registerEvent(Game.Events.CUSTOM_MODAL_WINDOW_BUTTON_CLICK, onAreaAndRegionChoice)
+
+BindHotkey("ctrl+shift+K", "StartFishing", ChooseAreaAndRegion)
+BindHotkey("ctrl+shift+J", "StopFishing", function() FishingBot:new("vip", "south"):Stop() end)
+BindHotkey("ctrl+shift+B", "ShowPosition", function()
+  local pos = Creature(Player.getId()):getPosition()
+  Client.showMessage("x = " .. pos.x .. " y = " .. pos.y .. " z = " .. pos.z)
+end)

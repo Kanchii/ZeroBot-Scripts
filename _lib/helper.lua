@@ -15,6 +15,10 @@ function FindNearbyNpc(name, range)
   return nil
 end
 
+function GetPlayerCapacity()
+  return math.floor(Player.getCapacity() / 100)
+end
+
 function BuyItems(itemId, itemQuantity)
   local totalItemCount = Game.getItemCount(itemId)
   local totalToBuy = math.max(0, itemQuantity - totalItemCount)
