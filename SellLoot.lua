@@ -4,6 +4,7 @@ local PZ_STATE = 14
 local CHECK_RANGE = 4
 local MAX_SELL_COUNT = 100
 local ITEM_TO_SELL_FILE_PATH = Engine.getScriptsDirectory() .. "/items_to_sell.json"
+local LOOT_POUCH_ID = 23721
 
 local itemsList = JSON.decode(ReadFile(ITEM_TO_SELL_FILE_PATH))
 
@@ -22,20 +23,25 @@ local function SellItems()
     wait(500)
     gameTalk("trade", 12)
     wait(1000)
-		for _, item in ipairs(itemsList) do
-      local id = item["id"]
-      local playerItems = Game.getInventoryItems()
-      for _, playerItem in ipairs(playerItems) do
-        if IsItemSellable(playerItem.id) then
-          for i = 1, math.ceil(Game.getItemCount(id) / MAX_SELL_COUNT) do
-            Npc.sell(id, MAX_SELL_COUNT, true)
-            wait(650)
+    if Game.getItemCount(LOOT_POUCH_ID) > 0 then
+      Npc.sell(LOOT_POUCH_ID, 1, true)
+      wait(200)
+    else
+      for _, item in ipairs(itemsList) do
+        local id = item["id"]
+        local playerItems = Game.getInventoryItems()
+        for _, playerItem in ipairs(playerItems) do
+          if IsItemSellable(playerItem.id) then
+            for i = 1, math.ceil(Game.getItemCount(id) / MAX_SELL_COUNT) do
+              Npc.sell(id, MAX_SELL_COUNT, true)
+              wait(650)
+            end
           end
         end
       end
+      WriteFile(ITEM_TO_SELL_FILE_PATH, JSON.encode(itemsList))
     end
 
-    WriteFile(ITEM_TO_SELL_FILE_PATH, JSON.encode(itemsList))
     Client.showMessage("\n\n\nTodos os items foram vendidos :)")
   end
 end
