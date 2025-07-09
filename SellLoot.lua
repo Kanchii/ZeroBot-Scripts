@@ -41,7 +41,9 @@ local function SellItems()
       end
       WriteFile(ITEM_TO_SELL_FILE_PATH, JSON.encode(itemsList))
     end
-
+    wait(500)
+    gameTalk("!deposit all", 1)
+    
     Client.showMessage("\n\n\nTodos os items foram vendidos :)")
   end
 end
